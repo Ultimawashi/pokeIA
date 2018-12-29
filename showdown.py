@@ -6,7 +6,7 @@ from exceptions import *
 
 class Showdown():
     BASE_URL="https://play.pokemonshowdown.com"
-    def __init__(self, url=BASE_URL, timer_on=False, browser='chrome', driver_dir="D:/projetsIA/Pokai/driver/chromedriver.exe"):
+    def __init__(self, url=BASE_URL, timer_on=False, browser='chrome', driver_dir="D:/projetsIA/pokeIA/driver/chromedriver.exe"):
         self.url = url
         self.timer_on = timer_on
         self.browser = browser

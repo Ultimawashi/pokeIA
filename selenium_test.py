@@ -56,7 +56,7 @@ class get_launched_battle(object):
     else:
         return False
 
-driver = webdriver.Chrome('D:/projetsIA/Pokai/driver/chromedriver.exe')
+driver = webdriver.Chrome('D:/projetsIA/pokeIA/driver/chromedriver.exe')
 driver.get("https://play.pokemonshowdown.com")
 
 

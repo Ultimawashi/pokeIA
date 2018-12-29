@@ -19,7 +19,7 @@ def write_json_dict(folder,filename,data):
 class Smogon():
     BASE_URL = "https://www.smogon.com"
     def __init__(self, url=BASE_URL, browser='chrome',
-                 driver_dir="D:/projetsIA/Pokai/driver/chromedriver.exe"):
+                 driver_dir="D:/projetsIA/pokeIA/driver/chromedriver.exe"):
         self.url = url
         self.browser = browser
         assert self.browser in ["firefox",

@@ -1,9 +1,9 @@
 import os
 from smogon import Smogon
 
-data_dir="D:/projetsIA/Pokai/pkmn_data"
+data_dir="D:/projetsIA/pokeIA/pkmn_data"
 
-data=Smogon(browser='chrome', driver_dir="D:/projetsIA/Pokai/driver/chromedriver.exe")
+data=Smogon(browser='chrome', driver_dir="D:/projetsIA/pokeIA/driver/chromedriver.exe")
 
 if not os.path.exists(data_dir):
     os.makedirs(data_dir)
