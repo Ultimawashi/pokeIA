@@ -8,5 +8,5 @@ lxml\
 selenium\
 tqdm
 
-#Showdown source code
+# Showdown source code
 https://github.com/Zarel/Pokemon-Showdown
