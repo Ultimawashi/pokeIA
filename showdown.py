@@ -1,12 +1,103 @@
 import time
+import re
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from exceptions import *
 
-class Showdown():
-    BASE_URL="https://play.pokemonshowdown.com"
-    def __init__(self, url=BASE_URL, timer_on=False, browser='chrome', driver_dir="D:/projetsIA/pokeIA/driver/chromedriver.exe"):
+BASE_URL="https://play.pokemonshowdown.com"
+default_home_value="gen7randombattle"
+tier_list_order=['LC','Untiered','PU','PUBL','NU','NUBL','RU','RUBL','UU','UUBL','OU','Uber','AG']
+supported_format_eq = {
+    'randombattle':'Uber',
+    'unratedrandombattle':'Uber',
+    'uber':'Uber',
+    'ou':'OU',
+    'uu':'UU',
+    'ru':'RU',
+    'nu':'NU',
+    'pu':'PU',
+    'lc':'LC'
+}
+
+def isincluded_tier(tier_list_order,tier):
+    index=tier_list_order.index(tier)
+    return [x for i,x in enumerate(tier_list_order) if i <=index]
+
+def found_str_by_regex(string,regex):
+    try:
+        found = re.search(regex, string).group(0)
+    except AttributeError:
+        found = ""
+    return found
+
+class check_if_connected(object):
+
+  def __init__(self,username):
+    self.username = username
+
+  def __call__(self, driver):
+    user = driver.find_element(*(By.CLASS_NAME, "username"))   # Finding the referenced element
+    if self.username in user.get_attribute('innerHTML'):
+        return True
+    else:
+        return False
+
+class check_homepage_loaded(object):
+
+    def __init__(self):
+        pass
+
+    def __call__(self, driver):
+        if driver.find_element_by_css_selector(".select.formatselect").get_attribute('value') == default_home_value:
+            return True
+        else:
+            return False
+
+class check_password_needed(object):
+
+    def __init__(self, username):
+        self.username = username
+
+    def __call__(self, driver):
+        if len(driver.find_elements(*(By.CLASS_NAME, "username"))) > 0:
+            user = driver.find_element(*(By.CLASS_NAME, "username"))
+            if self.username in user.get_attribute('innerHTML'):
+                return True
+            return False
+        elif len(driver.find_elements(*(By.NAME, "password"))) > 0:
+            return driver.find_element(*(By.NAME, "password"))
+        else:
+            return False
+
+class check_if_battle_started(object):
+
+    def __init__(self):
+        pass
+
+    def __call__(self, driver):
+        button=driver.find_element_by_css_selector(".button.big")
+        if 'disabled' not in button.get_attribute("class"):
+            return True
+        else:
+            return False
+
+class get_battle_launcher(object):
+
+    def __init__(self):
+        pass
+
+    def __call__(self, driver):
+
+
+
+class ShowdownBot():
+
+    def __init__(self,username,password, url=BASE_URL, timer_on=False, time=100, browser='chrome', driver_dir="D:/projetsIA/pokeIA/driver/chromedriver.exe"):
         self.url = url
         self.timer_on = timer_on
         self.browser = browser
@@ -16,6 +107,11 @@ class Showdown():
             self.driver = webdriver.Firefox(executable_path=driver_dir)
         elif browser == "chrome":
             self.driver = webdriver.Chrome(executable_path=driver_dir)
+        self.wait = WebDriverWait(self.driver, time)
+        self.username=username
+        self.password=password
+        self.gen = None
+        self.format = None
         self.state = None
         self.poke_map = {
             0:0,1:1,2:2,3:3,4:4,5:5
@@ -32,34 +128,58 @@ class Showdown():
             return "lobby"
 
     def wait_home_page(self):
-        while self.driver.find_element_by_css_selector(".select.formatselect").get_attribute('value') != "gen7randombattle":
-            time.sleep(1)
+        try:
+            self.wait.until(
+                check_homepage_loaded()
+            )
+        except TimeoutException as e:
+            raise e
 
-    def login(self, username, password):
+    def wait_logged(self):
+        try:
+            self.wait.until(
+            check_if_connected(self.username)
+            )
+        except TimeoutException as e:
+            raise e
+
+    def wait_battle_start(self):
+        try:
+            self.wait.until(
+                check_if_battle_started()
+            )
+        except TimeoutException as e:
+            raise e
+
+    def login(self):
         self.wait_home_page()
-        time.sleep(1)
-        elem = self.driver.find_element_by_name("login")
+        elem = self.wait.until(
+            EC.presence_of_element_located((By.NAME, "login"))
+        )
         elem.click()
-        time.sleep(1)
-        user = self.driver.find_element_by_name("username")
-        user.send_keys(username)
+        user = self.wait.until(
+            EC.presence_of_element_located((By.NAME, "username"))
+        )
+        user.send_keys(self.username)
         user.send_keys(Keys.RETURN)
-        while not self.check_exists_by_name("password"):
-            time.sleep(1)
-        passwd = self.driver.find_element_by_name("password")
-        passwd.send_keys(password)
-        passwd.send_keys(Keys.RETURN)
-        time.sleep(1)
+        passwd = self.wait.until(
+            check_password_needed(self.username)
+            )
+        if not isinstance(passwd,bool):
+            passwd.send_keys(self.password)
+            passwd.send_keys(Keys.RETURN)
+        self.wait_logged(self.username)
 
     def choose_tier(self, tier='gen7ou'):
         try:
-            while not self.check_exists_by_css_selector(".select.formatselect"):
-                time.sleep(1)
-            form = self.driver.find_element_by_css_selector(".select.formatselect")
+            form = self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".select.formatselect"))
+            )
             form.click()
-            time.sleep(2)
-            #self.driver.save_screenshot('ou.png')
             tier = self.driver.find_element_by_css_selector("[name='selectFormat'][value='%s']" % tier)
+            format_string=tier.get_attribute("value")
+            self.gen=found_str_by_regex(format_string,'gen[0-9]')
+            self.format=format_string.replace(self.gen,'')
             tier.click()
         except:
             raise TierException()
@@ -67,22 +187,20 @@ class Showdown():
 
     def start_ladder_battle(self):
         url1 = self.driver.current_url
-        battle = self.driver.find_element_by_css_selector(".button.big")
+        battle = self.wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".button.big"))
+        )
         battle.click()
-        battle_click = True
-        time.sleep(1)
+        self.wait_battle_start()
+
         if url1 == self.driver.current_url and self.check_exists_by_name("username"):
             ps_overlay = self.driver.find_element_by_xpath("/html/body/div[4]")
             ps_overlay.click()
             battle_click = False
-        while url1 == self.driver.current_url and self.check_exists_by_name("login"):
-            time.sleep(1)
         if url1 == self.driver.current_url and not battle_click:
             battle = self.driver.find_element_by_css_selector(".button.big")
             battle.click()
-            time.sleep(1)
-        while url1 == self.driver.current_url:
-            time.sleep(1.5)
+
 
     def start_challenge_battle(self, name, tier='ou'):
         lobby = self.driver.find_element_by_css_selector(".ilink[href='/lobby']")
@@ -118,23 +236,17 @@ class Showdown():
     def make_team(self, team):
         builder = self.driver.find_element_by_css_selector(".button[value='teambuilder']")
         builder.click()
-        #self.screenshot('log.png')
         new_team = self.driver.find_element_by_css_selector("[name='new']")
         new_team.click()
-        #self.screenshot('log.png')
         time.sleep(3)
         import_button = self.driver.find_element_by_css_selector(".majorbutton[name='import']")
         import_button.click()
-        #self.screenshot('log.png')
         textfield = self.driver.find_element_by_css_selector(".teamedit .textbox")
         textfield.send_keys(team)
-        #self.screenshot('log.png')
         save = self.driver.find_element_by_css_selector(".savebutton[name='saveImport']")
         save.click()
-        #self.screenshot('log.png')
         close_button = self.driver.find_element_by_css_selector(".closebutton[href='/teambuilder']")
         close_button.click()
-        #self.screenshot('log.png')
         time.sleep(2)
 
     def clear_cookies(self):
