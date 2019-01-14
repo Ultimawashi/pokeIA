@@ -1,8 +1,18 @@
-from showdown import Showdown
+from showdown import ShowdownBot
+from multiprocessing import Process
 
+teamtxt_path="D:/projetsIA/pokeIA/team_backup/pkmn_team.txt"
 
-bot=Showdown(browser='chrome', driver_dir="D:/projetsIA/pokeIA/driver/chromedriver.exe")
+bot=ShowdownBot("iamabot447","projectia21",browser='chrome', driver_dir="D:/projetsIA/pokeIA/driver/chromedriver.exe")
 bot.start_driver()
-bot.login("iamabot447","projectia21")
-bot.choose_tier('gen7randombattle')
-#bot.start_ladder_battle()
+bot.login()
+bot.import_teams(teamtxt_path)
+id=bot.start_challenge_battle("canbusload",100,"gen7ou")
+#id=bot.accept_challenge_battle("canbusload",100)
+#id=bot.start_ladder_battle("gen7ou")
+
+bot.play_battle(id)
+
+
+
+

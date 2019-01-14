@@ -9,3 +9,6 @@ class TierException(ShowdownException):
 
 class GameOverException(ShowdownException):
     pass
+
+class NoTeamException(ShowdownException):
+    pass

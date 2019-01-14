@@ -6,8 +6,11 @@ import os
 import collections
 import itertools
 
+# Global variables
+BASE_URL = "https://www.smogon.com"
 num_gen=7
 
+# Utility functions
 def makehash():
     return collections.defaultdict(makehash)
 
@@ -32,8 +35,10 @@ def split_pkmn_form(string,char,index):
     except IndexError:
         return ""
 
+
+# Class API for website smogon
 class Smogon():
-    BASE_URL = "https://www.smogon.com"
+
     def __init__(self, url=BASE_URL, browser='chrome',
                  driver_dir="D:/projetsIA/pokeIA/driver/chromedriver.exe"):
         self.url = url
