@@ -157,6 +157,11 @@ def get_pkmn_data(pkmn,gen,tier):
         res_data=f_data
         res_data=merge_pkmn_dicts_same_key([res_data[pkmn] for pkmn in res_data.keys()])
     res_data['Movepool'] = get_moves_data(gen, res_data['Movepool'])
+    res_data['Move1'] = res_data['Movepool']
+    res_data['Move2'] = res_data['Movepool']
+    res_data['Move3'] = res_data['Movepool']
+    res_data['Move4'] = res_data['Movepool']
+    res_data.pop('Movepool', None)
     res_data['Abilities'] = get_abilities_data(gen, res_data['Abilities'])
     return res_data
 
@@ -726,10 +731,10 @@ class ShowdownBot():
         closeroom.click()
 
     def initialize_battle_situation(self,battle_id):
-        my_pkmn=self.wait.until(
+        my_pkmns=self.wait.until(
             EC.presence_of_all_elements_located((By.XPATH, '//div[contains(@class,"switchmenu")]/button'))
         )
-        self.get_pkmn_info_div(my_pkmn[0])
+        [self.get_pkmn_info_div(my_pkmn) for my_pkmn in my_pkmns]
         adv_pkmns=self.wait.until(
             EC.presence_of_all_elements_located((By.XPATH, '//div[contains(@class,"teamicons")]/span[contains(@class,"picon")]'))
         )
@@ -757,7 +762,14 @@ class ShowdownBot():
         gender=div_info.xpath('.//img/@alt')[0]
         type=div_info.xpath('.//img/@alt')[1:]
         lvl=int(div_info.xpath('.//small/text()')[0].replace('L',''))
-        test=[t.repace() for t in div_info.xpath('.//p/text()')]
+        aux=[str(t).replace('\xa0','').replace('• ','').split('/') for t in div_info.xpath('.//p/text()')]
+        health=float(found_str_by_regex(aux[0], '\d+\.\d+%').replace('%',''))
+        if found_str_by_regex(aux[1][0], 'Ability: ') !="":
+            abilities=[aux[1][0].replace('Ability: ','')]
+        elif found_str_by_regex(aux[1][0], 'Possible abilities: ') !="":
+            abilities=aux[1][0].replace('Possible abilities: ','').split(', ')
+        if len(aux[1])>1:
+            item=[aux[1][1].replace('Item: ','')]
         print([pkmn,gender,type,lvl],test)
 
 
