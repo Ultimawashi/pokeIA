@@ -1,2 +1,5 @@
 ./driver/*
 ./__pycache__/*
+./pkmn_data/*
+./docs/*
+./nn architecture schema/*
