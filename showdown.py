@@ -202,6 +202,9 @@ def build_pokedict(poke_info,gen,tier):
     res['health']=poke_info[2]
     res['status']=poke_info[3]
     res['fainted']=poke_info[4]
+    res['items']=get_items_data(gen)
+    res['gender']='none'
+    res['lvl']=100
     res.update({'pkmn':get_pkmn_data(poke_info[0],gen,tier)})
     return {poke_info[0]:res}
 
@@ -719,10 +722,10 @@ class ShowdownBot():
         )
         if "cur" not in room.get_attribute("class"):
             room.click()
-        self.initialize_battle_situation(battle_id)
+        #self.initialize_battle_situation(battle_id)
         while not self.is_battle_finished():
             if self.is_time_to_select_action():
-                self.update_battle_situation(battle_id)
+                #self.update_battle_situation(battle_id)
                 index=self.select_random_action(self.battles[battle_id]['gen'])
                 self.apply_action(self.battles[battle_id]['gen'], index)
         closeroom = self.wait.until(
@@ -755,21 +758,23 @@ class ShowdownBot():
         #print(self.battles[battle_id]['battle_situation']['adv_poke_map'])
 
     def get_pkmn_info_div(self,elem):
+        res={}
+        res['pkmn']=dict()
         hover = ActionChains(self.driver).move_to_element(elem)
         hover.perform()
         div_info = html.fromstring(self.driver.page_source).xpath('//div[@id="tooltipwrapper"]')[0]
         pkmn=div_info.xpath('.//h2/text()')[0]
-        gender=div_info.xpath('.//img/@alt')[0]
+        res['gender']=div_info.xpath('.//img/@alt')[0]
         type=div_info.xpath('.//img/@alt')[1:]
-        lvl=int(div_info.xpath('.//small/text()')[0].replace('L',''))
+        res['lvl']=int(div_info.xpath('.//small/text()')[0].replace('L',''))
         aux=[str(t).replace('\xa0','').replace('• ','').split('/') for t in div_info.xpath('.//p/text()')]
-        health=float(found_str_by_regex(aux[0], '\d+\.\d+%').replace('%',''))
+        res['health']=float(found_str_by_regex(aux[0], '\d+\.\d+%').replace('%',''))
         if found_str_by_regex(aux[1][0], 'Ability: ') !="":
             abilities=[aux[1][0].replace('Ability: ','')]
         elif found_str_by_regex(aux[1][0], 'Possible abilities: ') !="":
             abilities=aux[1][0].replace('Possible abilities: ','').split(', ')
         if len(aux[1])>1:
-            item=[aux[1][1].replace('Item: ','')]
+            res['items']=[aux[1][1].replace('Item: ','')]
         print([pkmn,gender,type,lvl],test)
 
 

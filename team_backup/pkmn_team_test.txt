@@ -1,0 +1,58 @@
+=== [gen7ou] Untitled 9 ===
+
+Volcarona @ Buginium Z  
+Ability: Flame Body  
+EVs: 252 SpA / 4 SpD / 252 Spe  
+Timid Nature  
+IVs: 0 Atk  
+- Quiver Dance  
+- Fire Blast  
+- Bug Buzz  
+- Hidden Power [Ground]  
+
+Tapu Fini @ Leftovers  
+Ability: Misty Surge  
+EVs: 252 HP / 24 Def / 232 Spe  
+Timid Nature  
+IVs: 0 Atk  
+- Whirlpool  
+- Nature's Madness  
+- Defog  
+- Taunt  
+
+Greninja-Ash @ Choice Specs  
+Ability: Battle Bond  
+EVs: 4 Def / 252 SpA / 252 Spe  
+Timid Nature  
+- Hydro Pump  
+- Dark Pulse  
+- Water Shuriken  
+- Spikes  
+
+Landorus-Therian @ Yache Berry  
+Ability: Intimidate  
+EVs: 248 HP / 116 Def / 144 Spe  
+Impish Nature  
+- Earthquake  
+- U-turn  
+- Stealth Rock  
+- Hidden Power [Ice]  
+
+Scizor-Mega @ Scizorite  
+Ability: Light Metal  
+EVs: 248 HP / 244 Def / 16 SpD  
+Impish Nature  
+- Curse  
+- Bullet Punch  
+- Roost  
+- U-turn  
+
+Latias @ Choice Scarf  
+Ability: Levitate  
+EVs: 4 Def / 252 SpA / 252 Spe  
+Timid Nature  
+IVs: 0 Atk  
+- Draco Meteor  
+- Surf  
+- Healing Wish  
+- Defog  
