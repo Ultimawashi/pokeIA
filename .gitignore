@@ -3,3 +3,5 @@
 ./pkmn_data/*
 ./docs/*
 ./nn architecture schema/*
+./battlelog/*
+./download/*

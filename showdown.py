@@ -1,6 +1,4 @@
-import os, json
-import re
-import random
+import os, json, gc, re, random, time, shutil
 from selenium import webdriver
 from lxml import html, etree
 from selenium.webdriver.common.keys import Keys
@@ -13,11 +11,13 @@ from exceptions import *
 
 
 # Global variables
-dowload_dir="D:/Users/FERNANDES_CL/Downloads"
+battlelog="D:/projetsIA/pokeIA/battlelog"
+download_dir="D:/projetsIA/pokeIA/download"
 BASE_URL="https://play.pokemonshowdown.com"
 default_home_value="gen7randombattle"
 data_dir="D:/projetsIA/pokeIA/pkmn_data"
-
+default_lvl=100
+dwnld_foler="D:/Users/FERNANDES_CL/Downloads"
 
 #If you want to add generations, put the new gens at the end of the list only
 gen_list=['gen1','gen2','gen3','gen4','gen5','gen6','gen7']
@@ -33,6 +33,8 @@ status_list=['none','tox','par','brn','slp','psn','frz']
 #The tier inclusion, if you add a new tier, please modify this list accordingly (a tier include all tiers behind him in index position)
 tier_order=['LC','Untiered','PU','PUBL','NU','NUBL','RU','RUBL','UU','UUBL','OU','Uber','AG','Limbo']
 
+#False form
+fform=['Genesect-Burn','Genesect-Chill','Genesect-Douse','Genesect-Shock']
 
 #A dict which map supported pokemon-showdown battle format to their smogon equivalent tier
 supported_format_eq = {
@@ -90,6 +92,16 @@ possible_action_dict={
 
 # Utility functions
 
+def downloads_done():
+    for i in os.listdir(download_dir):
+        if ".crdownload" in i or ".tmp" in i:
+            time.sleep(0.5)
+            downloads_done()
+
+def write_json_dict(folder,filename,data):
+    with open(os.path.join(folder, filename), 'w') as outfile:
+        outfile.write(json.dumps(data))
+
 def isincluded_tier(tier_list_order,tier):
     index=tier_list_order.index(tier)
     return [x for i,x in enumerate(tier_list_order) if i <=index]
@@ -129,20 +141,31 @@ def build_action_map(gen,actiondict):
     res=dict()
     return [res.update({i:action}) for i,action in enumerate(actiondict[gen])]
 
-def get_moves_data(gen,listmoves):
+def get_moves_data(gen,listmoves=None):
     with open(os.path.join(data_dir, 'moves.json'), 'r') as moves_json:
         moves_data=json.load(moves_json)[gen]
-    return {l:moves_data[l] for l in listmoves}
+    if listmoves is not None:
+        return {l:moves_data[l] for l in listmoves}
+    return moves_data
 
-def get_items_data(gen):
+def get_items_data(gen,listitems=None):
     with open(os.path.join(data_dir, 'items.json'), 'r') as items_json:
         items_data=json.load(items_json)[gen]
+    if listitems is not None:
+        return {l: items_data[l] for l in listitems}
     return items_data
 
-def get_abilities_data(gen,listabilities):
+def get_items_key(gen):
+    with open(os.path.join(data_dir, 'items.json'), 'r') as items_json:
+        items_data=json.load(items_json)[gen]
+    return list(items_data.keys())
+
+def get_abilities_data(gen,listabilities=None):
     with open(os.path.join(data_dir, 'abilities.json'), 'r') as abilities_json:
         abilities_data=json.load(abilities_json)[gen]
-    return {l:abilities_data[l] for l in listabilities}
+    if listabilities is not None:
+        return {l:abilities_data[l] for l in listabilities}
+    return abilities_data
 
 def get_pkmn_data(pkmn,gen,tier):
     tiers = isincluded_tier(tier_order, tier)
@@ -156,13 +179,6 @@ def get_pkmn_data(pkmn,gen,tier):
     else:
         res_data=f_data
         res_data=merge_pkmn_dicts_same_key([res_data[pkmn] for pkmn in res_data.keys()])
-    res_data['Movepool'] = get_moves_data(gen, res_data['Movepool'])
-    res_data['Move1'] = res_data['Movepool']
-    res_data['Move2'] = res_data['Movepool']
-    res_data['Move3'] = res_data['Movepool']
-    res_data['Move4'] = res_data['Movepool']
-    res_data.pop('Movepool', None)
-    res_data['Abilities'] = get_abilities_data(gen, res_data['Abilities'])
     return res_data
 
 def parse_pkmn_id(identifier):
@@ -198,25 +214,35 @@ def parse_pkmn_id(identifier):
 
 def build_pokedict(poke_info,gen,tier):
     res={}
-    res['active']=poke_info[1]
-    res['health']=poke_info[2]
-    res['status']=poke_info[3]
-    res['fainted']=poke_info[4]
-    res['items']=get_items_data(gen)
-    res['gender']='none'
-    res['lvl']=100
-    res.update({'pkmn':get_pkmn_data(poke_info[0],gen,tier)})
+    res['Active']=poke_info[1]
+    res['Health']=poke_info[2]
+    res['Status']=poke_info[3]
+    res['Fainted']=poke_info[4]
+    res['Items']=get_items_key(gen)
+    res['Gender']='none'
+    res['Lvl']=default_lvl
+    res.update(get_pkmn_data(poke_info[0],gen,tier))
+    res['Move1'] = res['Movepool']
+    res['Move2'] = res['Movepool']
+    res['Move3'] = res['Movepool']
+    res['Move4'] = res['Movepool']
+    res.pop('Movepool',None)
     return {poke_info[0]:res}
 
-def update_pokedict(pokedict,poke_info,gen,tier):
+def update_pokedict_with_icon(pokedict,poke_info,gen,tier):
     key=[key for key in pokedict.keys()][0]
-    pokedict[key]['active']=poke_info[1]
+    pokedict[key]['Active']=poke_info[1]
     if poke_info[1] !=1:
-        pokedict[key]['health']=poke_info[2]
-        pokedict[key]['status']=poke_info[3]
-        pokedict[key]['fainted']=poke_info[4]
+        pokedict[key]['Health']=poke_info[2]
+        pokedict[key]['Status']=poke_info[3]
+        pokedict[key]['Fainted']=poke_info[4]
     if key!=poke_info[0]:
-        pokedict[key].update({'pkmn': get_pkmn_data(poke_info[0], gen, tier)})
+        pokedict[poke_info[0]] = pokedict.pop(key)
+        key=poke_info[0]
+        pokedict[key].update(get_pkmn_data(poke_info[0], gen, tier))
+        for keyM in ['Move1','Move2','Move3','Move4']:
+                pokedict[key][keyM] = list(set(pokedict[key][keyM]).intersection(pokedict[key]['Movepool']))
+        pokedict[key].pop('Movepool', None)
 
 # Custom selenium wait class
 class check_if_connected(object):
@@ -334,9 +360,15 @@ class ShowdownBot():
         assert self.browser in ["firefox",
                                 "chrome"], "please choose a valid browser (only chrome or firefox are supported)"
         if browser == "firefox":
-            self.driver = webdriver.Firefox(executable_path=driver_dir)
+            options = webdriver.FirefoxOptions()
+            prefs = {'download.default_directory': download_dir}
+            options.add_experimental_option('prefs', prefs)
+            self.driver = webdriver.Firefox(executable_path=driver_dir,firefox_options=options)
         elif browser == "chrome":
-            self.driver = webdriver.Chrome(executable_path=driver_dir)
+            options = webdriver.ChromeOptions()
+            prefs = {'download.default_directory': download_dir}
+            options.add_experimental_option('prefs', prefs)
+            self.driver = webdriver.Chrome(executable_path=driver_dir,chrome_options=options)
         self.wait = WebDriverWait(self.driver, timeout)
         self.username=username
         self.password=password
@@ -490,7 +522,7 @@ class ShowdownBot():
             tier=supported_format_eq[format.replace(gen,'')]
         except:
             raise TierException()
-        return [gen,tier]
+        return [gen,tier,format.replace(gen,'')]
 
     def select_team(self,index,format):
         num_team=len(self.teams[format])
@@ -542,7 +574,8 @@ class ShowdownBot():
             battleid=self.driver.current_url.replace(self.url,'')
             if battleid != '':
                 self.battles.update(
-                    {battleid: {'gen': battle_info[0], 'tier': battle_info[1], 'battle_situation': dict()}})
+                    {battleid: {'gen': battle_info[0], 'tier': battle_info[1], 'format': battle_info[2],
+                                'battle_situation': dict()}})
                 return battleid
             return 1
         except TimeoutException:
@@ -599,7 +632,8 @@ class ShowdownBot():
             battleid = self.driver.current_url.replace(self.url, '')
             if battleid != '':
                 self.battles.update(
-                    {battleid: {'gen': battle_info[0], 'tier': battle_info[1], 'battle_situation': dict()}})
+                    {battleid: {'gen': battle_info[0], 'tier': battle_info[1], 'format': battle_info[2],
+                                'battle_situation': dict()}})
                 return battleid
             return 1
         except TimeoutException:
@@ -633,7 +667,9 @@ class ShowdownBot():
                 return 1
             battleid = self.driver.current_url.replace(self.url, '')
             if battleid != '':
-                self.battles.update({battleid: {'gen': battle_info[0], 'tier': battle_info[1], 'battle_situation':dict()}})
+                self.battles.update(
+                    {battleid: {'gen': battle_info[0], 'tier': battle_info[1], 'format': battle_info[2],
+                                'battle_situation': dict()}})
                 return battleid
             return 1
         except TimeoutException:
@@ -716,99 +752,133 @@ class ShowdownBot():
                     if switch.is_displayed() and switch.is_enabled() and 'disabled'not in switch.get_attribute('class'):
                         switch.click()
 
-    def play_battle(self, battle_id):
+    def play_battle(self, battle_id, write=False):
         room = self.wait.until(
             EC.presence_of_element_located((By.XPATH, '//a[contains(@class,"roomtab") and @href="'+battle_id+'"]'))
         )
         if "cur" not in room.get_attribute("class"):
             room.click()
-        #self.initialize_battle_situation(battle_id)
+        self.initialize_battle_situation(battle_id)
         while not self.is_battle_finished():
             if self.is_time_to_select_action():
-                #self.update_battle_situation(battle_id)
+                self.update_battle_situation(battle_id)
                 index=self.select_random_action(self.battles[battle_id]['gen'])
                 self.apply_action(self.battles[battle_id]['gen'], index)
+                print(self.battles[battle_id]['battle_situation']['my_poke_map'])
+                print(self.battles[battle_id]['battle_situation']['adv_poke_map'])
+                if write:
+                    self.write_situation_history(battle_id)
+        if write:
+            self.get_battle_html_file(battle_id)
         closeroom = self.wait.until(
             EC.presence_of_element_located((By.XPATH, '//a[contains(@class,"roomtab") and @href="' + battle_id + '"]/following-sibling::button'))
         )
+        self.battles.pop(battle_id,None)
+        gc.collect()
         closeroom.click()
 
     def initialize_battle_situation(self,battle_id):
-        my_pkmns=self.wait.until(
+        """my_pkmns=self.wait.until(
             EC.presence_of_all_elements_located((By.XPATH, '//div[contains(@class,"switchmenu")]/button'))
         )
-        [self.get_pkmn_info_div(my_pkmn) for my_pkmn in my_pkmns]
-        adv_pkmns=self.wait.until(
+        [self.get_pkmn_info_div(my_pkmn) for my_pkmn in my_pkmns]"""
+        pkmns=self.wait.until(
             EC.presence_of_all_elements_located((By.XPATH, '//div[contains(@class,"teamicons")]/span[contains(@class,"picon")]'))
         )
-        adv_pkmns = [parse_pkmn_id(adv_pkmn.get_attribute('title')) for adv_pkmn in adv_pkmns[6:]]
+        my_pkmns = [parse_pkmn_id(adv_pkmn.get_attribute('title')) for adv_pkmn in pkmns[:6]]
+        my_poke_map = {index: build_pokedict(pkmn, self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
+                        index, pkmn in enumerate(my_pkmns)}
+        self.battles[battle_id]['battle_situation'].update({'my_poke_map': my_poke_map})
+        adv_pkmns = [parse_pkmn_id(adv_pkmn.get_attribute('title')) for adv_pkmn in pkmns[6:]]
         adv_poke_map = {index: build_pokedict(pkmn, self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
                         index, pkmn in enumerate(adv_pkmns)}
         self.battles[battle_id]['battle_situation'].update({'adv_poke_map':adv_poke_map})
         #print(self.battles[battle_id]['battle_situation']['adv_poke_map'])
 
     def update_battle_situation(self,battle_id):
-        adv_pkmns = self.wait.until(
+        """my_pkmns = self.wait.until(
+            EC.presence_of_all_elements_located((By.XPATH, '//div[contains(@class,"switchmenu")]/button'))
+        )
+        [self.get_pkmn_info_div(my_pkmn) for my_pkmn in my_pkmns]"""
+        pkmns = self.wait.until(
             EC.presence_of_all_elements_located(
                 (By.XPATH, '//div[contains(@class,"teamicons")]/span[contains(@class,"picon")]'))
         )
-        adv_pkmns = [parse_pkmn_id(adv_pkmn.get_attribute('title')) for adv_pkmn in adv_pkmns[6:]]
-        [update_pokedict(self.battles[battle_id]['battle_situation']['adv_poke_map'][index],pkmn,self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
+        my_pkmns = [parse_pkmn_id(my_pkmn.get_attribute('title')) for my_pkmn in pkmns[:6]]
+        [update_pokedict_with_icon(self.battles[battle_id]['battle_situation']['my_poke_map'][index], pkmn,
+                                   self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
+         index, pkmn in enumerate(my_pkmns)]
+
+        adv_pkmns = [parse_pkmn_id(adv_pkmn.get_attribute('title')) for adv_pkmn in pkmns[6:]]
+        [update_pokedict_with_icon(self.battles[battle_id]['battle_situation']['adv_poke_map'][index],pkmn,self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
                         index, pkmn in enumerate(adv_pkmns)]
         #print(self.battles[battle_id]['battle_situation']['adv_poke_map'])
 
     def get_pkmn_info_div(self,elem):
         res={}
-        res['pkmn']=dict()
         hover = ActionChains(self.driver).move_to_element(elem)
         hover.perform()
         div_info = html.fromstring(self.driver.page_source).xpath('//div[@id="tooltipwrapper"]')[0]
         pkmn=div_info.xpath('.//h2/text()')[0]
-        res['gender']=div_info.xpath('.//img/@alt')[0]
-        type=div_info.xpath('.//img/@alt')[1:]
-        res['lvl']=int(div_info.xpath('.//small/text()')[0].replace('L',''))
-        aux=[str(t).replace('\xa0','').replace('• ','').split('/') for t in div_info.xpath('.//p/text()')]
-        res['health']=float(found_str_by_regex(aux[0], '\d+\.\d+%').replace('%',''))
-        if found_str_by_regex(aux[1][0], 'Ability: ') !="":
-            abilities=[aux[1][0].replace('Ability: ','')]
-        elif found_str_by_regex(aux[1][0], 'Possible abilities: ') !="":
-            abilities=aux[1][0].replace('Possible abilities: ','').split(', ')
-        if len(aux[1])>1:
-            res['items']=[aux[1][1].replace('Item: ','')]
-        print([pkmn,gender,type,lvl],test)
+        aux = div_info.xpath('.//small/text()')
+        for a in aux:
+            form = found_str_by_regex(a, '\(([^\)]+)\)').replace('(', '').replace(')', '')
+            if form !="" and form not in fform:
+                pkmn=form
+            lvl = found_str_by_regex(a, 'L[0-9][0-9]').replace('L', '')
+            if lvl != "":
+                res['Lvl'] = lvl
+        aux=div_info.xpath('.//img[contains(@src,"gender")]/@alt')
+        if len(aux)>0:
+            res['Gender'] = aux[0]
+        res['Type']=div_info.xpath('.//img[contains(@src,"types")]/@alt')
+        aux = [str(t).replace('\xa0', '').replace('• ', '').split(' /') for t in
+               div_info.xpath('.//p[not(contains(@class, "section"))]/text()')]
+        res['Health'] = found_str_by_regex(aux[0][0], '\d+\.\d+%').replace('%', '')
+        hp = found_str_by_regex(aux[0][0], '(?<![\d.])[0-9]+(?![\d.]).*?(?<![\d.])[0-9]+(?![\d.])')
+        hp=hp.split("/")
+        if len(hp) >1 and hp[1] != "":
+            res['HP']=hp[1]
+        if len(aux[1]) > 0:
+            if found_str_by_regex(aux[1][0], 'Ability: ') != "":
+                res['Abilities'] = [aux[1][0].replace('Ability: ', '')]
+            elif found_str_by_regex(aux[1][0], 'Possible abilities: ') != "":
+                res['Abilities'] = aux[1][0].replace('Possible abilities: ', '').split(', ')
+        if len(aux[1]) > 1:
+            if found_str_by_regex(aux[1][1], ' Item: ') != "":
+                res['Items'] = [aux[1][1].replace(' Item: ', '')]
+        for stat in aux[2]:
+            if found_str_by_regex(stat, 'Atk'):
+                res['Attack']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+            if found_str_by_regex(stat, 'Def'):
+                res['Defense']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+            if found_str_by_regex(stat, 'SpA'):
+                res['Sp. Atk']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+            if found_str_by_regex(stat, 'SpD'):
+                res['Sp. Def']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+            if found_str_by_regex(stat, 'Spe'):
+                res['Speed']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+        aux = div_info.xpath('.//p[contains(@class, "section")]/text()')
+        for i,a in enumerate(aux):
+            key='Move'+str(i+1)
+            res[key]=a.replace('• ', '')
 
+        print(pkmn, res)
+        return pkmn, res
 
-    def get_my_primary(self):
-        img = self.driver.find_elements_by_css_selector(".battle img")[6]
-        text = img.get_attribute('src')
-        poke = text.split("/")[-1]
-        poke = poke[:-4]
-        return poke
+    def write_situation_history(self,battle_id):
+        dir=battle_id.replace('/','')
+        if not os.path.exists(os.path.join(battlelog,dir)):
+            os.makedirs(os.path.join(battlelog,dir))
+        i=len([x for x in os.listdir(os.path.join(battlelog,dir)) if x.endswith('.json')])
+        write_json_dict(os.path.join(battlelog,dir), dir+'-'+str(i)+'.json',self.battles[battle_id])
 
-    def get_opp_primary(self):
-        img = self.driver.find_elements_by_css_selector(".battle img")[5]
-        text = img.get_attribute('src')
-        poke = text.split("/")[-1]
-        poke = poke[:-4]
-        return poke
-
-    def check_alive(self):
-        return self.check_exists_by_css_selector(".rstatbar")
-
-    def get_my_primary_health(self):
-        if self.check_exists_by_css_selector(".rstatbar .hpbar .hptext"):
-            hp_text = self.driver.find_element_by_css_selector(".rstatbar .hpbar .hptext")
-            hp = hp_text.text.strip("%")
-            hp = int(hp)
-        else:
-            hp = 0
-        return hp
-
-    def get_opp_primary_health(self):
-        if self.check_exists_by_css_selector(".lstatbar .hpbar .hptext"):
-            hp_text = self.driver.find_element_by_css_selector(".lstatbar .hpbar .hptext")
-            hp = hp_text.text.strip("%")
-            hp = int(hp)
-        else:
-            hp = 0
-        return hp
+    def get_battle_html_file(self,battle_id):
+        dir = battle_id.replace('/', '')
+        dwnld_button=self.wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, '.button.replayDownloadButton'))
+        )
+        dwnld_button.click()
+        downloads_done()
+        filename = max([os.path.join(download_dir,f) for f in os.listdir(download_dir)], key=os.path.getctime)
+        shutil.move(os.path.join(download_dir, filename), os.path.join(battlelog,dir,dir+'.html'))
