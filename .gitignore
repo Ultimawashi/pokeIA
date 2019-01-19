@@ -4,4 +4,6 @@
 ./docs/*
 ./nn architecture schema/*
 ./battlelog/*
+./battlelog/*/*
 ./download/*
+./.idea/*

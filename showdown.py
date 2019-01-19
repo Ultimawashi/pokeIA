@@ -182,42 +182,40 @@ def get_pkmn_data(pkmn,gen,tier):
     return res_data
 
 def parse_pkmn_id(identifier):
+    res={}
     id=identifier.replace('|',' (').split(" (")
     id=[i.replace(')','') for i in id]
     active = [found_str_by_regex(i, 'active') for i in id if found_str_by_regex(i, 'active') != ""]
     fainted = [found_str_by_regex(i, 'fainted') for i in id if found_str_by_regex(i, 'fainted') != ""]
-    health = [found_str_by_regex(i, '[0-9][0-9]%') for i in id if
-              found_str_by_regex(i, '[0-9][0-9]%') != ""]
+    health = [found_str_by_regex(i, '(\d+(\.\d+)?)%') for i in id if
+              found_str_by_regex(i, '(\d+(\.\d+)?)%') != ""]
+    print(health)
     status = [i for i in id if i in status_list]
     id = [i for i in id if i not in active and i not in health and i not in fainted and i not in status]
     if len(active)==1:
-        active=1
+        res['Active']=1
     else:
-        active=0
+        res['Active']=0
     if len(fainted)==1:
-        fainted=1
+        res['Fainted']=1
     else:
-        fainted=0
+        res['Fainted']=0
     if len(health)==1:
-        health = float(health[0].replace('%',''))
-    else:
-        health = 100.0
+        res['Health'] = float(health[0].replace('%',''))
     if len(status)==1:
-        status=status[0]
+        res['Status']=status[0]
     else:
-        status='none'
+        res['Status']='none'
     if len(id)>1:
         pkmn=id[1]
     else:
         pkmn = id[0]
-    return [pkmn,active,health,status,fainted]
+    return pkmn,res
 
 def build_pokedict(poke_info,gen,tier):
     res={}
-    res['Active']=poke_info[1]
-    res['Health']=poke_info[2]
-    res['Status']=poke_info[3]
-    res['Fainted']=poke_info[4]
+    res.update(poke_info[1])
+    res['Health']=100
     res['Items']=get_items_key(gen)
     res['Gender']='none'
     res['Lvl']=default_lvl
@@ -231,11 +229,7 @@ def build_pokedict(poke_info,gen,tier):
 
 def update_pokedict_with_icon(pokedict,poke_info,gen,tier):
     key=[key for key in pokedict.keys()][0]
-    pokedict[key]['Active']=poke_info[1]
-    if poke_info[1] !=1:
-        pokedict[key]['Health']=poke_info[2]
-        pokedict[key]['Status']=poke_info[3]
-        pokedict[key]['Fainted']=poke_info[4]
+    pokedict[key].update(poke_info[1])
     if key!=poke_info[0]:
         pokedict[poke_info[0]] = pokedict.pop(key)
         key=poke_info[0]
@@ -764,8 +758,6 @@ class ShowdownBot():
                 self.update_battle_situation(battle_id)
                 index=self.select_random_action(self.battles[battle_id]['gen'])
                 self.apply_action(self.battles[battle_id]['gen'], index)
-                print(self.battles[battle_id]['battle_situation']['my_poke_map'])
-                print(self.battles[battle_id]['battle_situation']['adv_poke_map'])
                 if write:
                     self.write_situation_history(battle_id)
         if write:

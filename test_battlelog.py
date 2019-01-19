@@ -1,5 +1,5 @@
 import os, json
-dir='D:/projetsIA/pokeIA/battlelog/battle-gen7randombattle-851038814'
+dir='D:/projetsIA/pokeIA/battlelog/battle-gen7randombattle-851136604'
 filelist=[x for x in os.listdir(dir) if x.endswith('.json')]
 data=[]
 for filename in filelist:
