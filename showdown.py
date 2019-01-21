@@ -106,6 +106,14 @@ def isincluded_tier(tier_list_order,tier):
     index=tier_list_order.index(tier)
     return [x for i,x in enumerate(tier_list_order) if i <=index]
 
+def write_txt(folder,filename,data):
+    if not os.path.exists(os.path.join(folder, filename)):
+        with open(os.path.join(folder, filename), 'w') as outfile:
+            outfile.write(data)
+    else:
+        with open(os.path.join(folder, filename), 'a') as outfile:
+            outfile.write(data)
+
 def merge_pkmn_dicts_same_key(ds,spec_key=['Abilities','Movepool']):
     norm_key=[k for k in ds[0].keys() if k not in spec_key]
     res = {}
@@ -189,7 +197,6 @@ def parse_pkmn_id(identifier):
     fainted = [found_str_by_regex(i, 'fainted') for i in id if found_str_by_regex(i, 'fainted') != ""]
     health = [found_str_by_regex(i, '(\d+(\.\d+)?)%') for i in id if
               found_str_by_regex(i, '(\d+(\.\d+)?)%') != ""]
-    print(health)
     status = [i for i in id if i in status_list]
     id = [i for i in id if i not in active and i not in health and i not in fainted and i not in status]
     if len(active)==1:
@@ -224,6 +231,7 @@ def build_pokedict(poke_info,gen,tier):
     res['Move2'] = res['Movepool']
     res['Move3'] = res['Movepool']
     res['Move4'] = res['Movepool']
+    res['PP'] = [None, None, None, None]
     res.pop('Movepool',None)
     return {poke_info[0]:res}
 
@@ -427,30 +435,37 @@ class ShowdownBot():
                 EC.presence_of_element_located((By.CSS_SELECTOR, "[name='muted']"))
             )
             mute.click()
+            return True
         except TimeoutException:
-            return 1
+            return False
 
     def start_timer(self):
-
-        timer = self.wait.until(
-            EC.presence_of_element_located((By.NAME, "openTimer"))
-            )
-        timer.click()
-        timer = self.wait.until(
-            EC.presence_of_element_located((By.NAME, "timerOn"))
-            )
-        timer.click()
+        try:
+            timer = self.wait.until(
+                EC.presence_of_element_located((By.NAME, "openTimer"))
+                )
+            timer.click()
+            timer = self.wait.until(
+                EC.presence_of_element_located((By.NAME, "timerOn"))
+                )
+            timer.click()
+            return True
+        except TimeoutException:
+            return False
 
     def stop_timer(self):
-
-        timer = self.wait.until(
-            EC.presence_of_element_located((By.NAME, "openTimer"))
-        )
-        timer.click()
-        timer = self.wait.until(
-            EC.presence_of_element_located((By.NAME, "timerOff"))
-        )
-        timer.click()
+        try:
+            timer = self.wait.until(
+                EC.presence_of_element_located((By.NAME, "openTimer"))
+            )
+            timer.click()
+            timer = self.wait.until(
+                EC.presence_of_element_located((By.NAME, "timerOff"))
+            )
+            timer.click()
+            return True
+        except TimeoutException:
+            return False
 
     def import_teams(self, teamtxt_path):
         builder =self.wait.until(
@@ -727,7 +742,6 @@ class ShowdownBot():
                             if move.is_displayed() and move.is_enabled() and 'disabled' not in move.get_attribute('class'):
                                 move.click()
 
-
         elif len(action) == 1:
 
             if action[0].startswith('Move'):
@@ -754,6 +768,8 @@ class ShowdownBot():
             room.click()
         self.initialize_battle_situation(battle_id)
         while not self.is_battle_finished():
+            self.update_with_div_info(self.battles[battle_id]['battle_situation']['adv_poke_map'],
+                                      self.get_adv_active_pkmn_info(battle_id))
             if self.is_time_to_select_action():
                 self.update_battle_situation(battle_id)
                 index=self.select_random_action(self.battles[battle_id]['gen'])
@@ -770,10 +786,6 @@ class ShowdownBot():
         closeroom.click()
 
     def initialize_battle_situation(self,battle_id):
-        """my_pkmns=self.wait.until(
-            EC.presence_of_all_elements_located((By.XPATH, '//div[contains(@class,"switchmenu")]/button'))
-        )
-        [self.get_pkmn_info_div(my_pkmn) for my_pkmn in my_pkmns]"""
         pkmns=self.wait.until(
             EC.presence_of_all_elements_located((By.XPATH, '//div[contains(@class,"teamicons")]/span[contains(@class,"picon")]'))
         )
@@ -785,13 +797,9 @@ class ShowdownBot():
         adv_poke_map = {index: build_pokedict(pkmn, self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
                         index, pkmn in enumerate(adv_pkmns)}
         self.battles[battle_id]['battle_situation'].update({'adv_poke_map':adv_poke_map})
-        #print(self.battles[battle_id]['battle_situation']['adv_poke_map'])
 
     def update_battle_situation(self,battle_id):
-        """my_pkmns = self.wait.until(
-            EC.presence_of_all_elements_located((By.XPATH, '//div[contains(@class,"switchmenu")]/button'))
-        )
-        [self.get_pkmn_info_div(my_pkmn) for my_pkmn in my_pkmns]"""
+
         pkmns = self.wait.until(
             EC.presence_of_all_elements_located(
                 (By.XPATH, '//div[contains(@class,"teamicons")]/span[contains(@class,"picon")]'))
@@ -804,66 +812,126 @@ class ShowdownBot():
         adv_pkmns = [parse_pkmn_id(adv_pkmn.get_attribute('title')) for adv_pkmn in pkmns[6:]]
         [update_pokedict_with_icon(self.battles[battle_id]['battle_situation']['adv_poke_map'][index],pkmn,self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
                         index, pkmn in enumerate(adv_pkmns)]
-        #print(self.battles[battle_id]['battle_situation']['adv_poke_map'])
+
+        my_up_pkmns = self.driver.find_elements_by_css_selector(".switchmenu button")
+        if len(my_up_pkmns)>0:
+            [self.update_with_div_info(self.battles[battle_id]['battle_situation']['my_poke_map'],self.get_pkmn_info_div(my_pkmn)) for my_pkmn in my_up_pkmns]
+        else:
+            self.update_with_div_info(self.battles[battle_id]['battle_situation']['my_poke_map'],
+                                  self.get_my_active_pkmn_info(battle_id))
+
+    def get_adv_active_pkmn_info(self,battleid):
+        iddiv="BattleTooltips.showTooltipFor('"+battleid.replace('/','')+"', 'your0','pokemon', this, true)"
+        test=self.wait.until(
+            EC.presence_of_element_located(
+                (By.XPATH, '//div[@onmouseover ="'+iddiv+'"]'))
+        )
+        return(self.get_pkmn_info_div(test))
+
+    def get_my_active_pkmn_info(self,battleid):
+        iddiv="BattleTooltips.showTooltipFor('"+battleid.replace('/','')+"', 'my0','pokemon', this, true)"
+        test=self.wait.until(
+            EC.presence_of_element_located(
+                (By.XPATH, '//div[@onmouseover ="'+iddiv+'"]'))
+        )
+        pkmn,res=self.get_pkmn_info_div(test)
+        for key in ['Move1','Move2','Move3','Move4']:
+            res.pop(key, None)
+        movediv = html.fromstring(self.driver.page_source).xpath('//div[@class="movemenu"]/button[@name="chooseMove"]')
+        move_info=[self.parse_move_div(move) for move in movediv]
+        for i, a in enumerate(move_info):
+                key = 'Move' + str(i+1)
+                res[key] = a[0]
+                res['PP'][i]=a[1]
+        return pkmn,res
+
+    def update_with_div_info(self,pkmn_dict,pkmn_info):
+        for key in pkmn_dict.keys():
+            if pkmn_info[0] in pkmn_dict[key].keys():
+                pkmn_dict[key][pkmn_info[0]].update(pkmn_info[1])
 
     def get_pkmn_info_div(self,elem):
         res={}
+        pkmn=""
         hover = ActionChains(self.driver).move_to_element(elem)
         hover.perform()
-        div_info = html.fromstring(self.driver.page_source).xpath('//div[@id="tooltipwrapper"]')[0]
-        pkmn=div_info.xpath('.//h2/text()')[0]
-        aux = div_info.xpath('.//small/text()')
-        for a in aux:
-            form = found_str_by_regex(a, '\(([^\)]+)\)').replace('(', '').replace(')', '')
-            if form !="" and form not in fform:
-                pkmn=form
-            lvl = found_str_by_regex(a, 'L[0-9][0-9]').replace('L', '')
-            if lvl != "":
-                res['Lvl'] = lvl
-        aux=div_info.xpath('.//img[contains(@src,"gender")]/@alt')
-        if len(aux)>0:
-            res['Gender'] = aux[0]
-        res['Type']=div_info.xpath('.//img[contains(@src,"types")]/@alt')
-        aux = [str(t).replace('\xa0', '').replace('• ', '').split(' /') for t in
-               div_info.xpath('.//p[not(contains(@class, "section"))]/text()')]
-        res['Health'] = found_str_by_regex(aux[0][0], '\d+\.\d+%').replace('%', '')
-        hp = found_str_by_regex(aux[0][0], '(?<![\d.])[0-9]+(?![\d.]).*?(?<![\d.])[0-9]+(?![\d.])')
-        hp=hp.split("/")
-        if len(hp) >1 and hp[1] != "":
-            res['HP']=hp[1]
-        if len(aux[1]) > 0:
-            if found_str_by_regex(aux[1][0], 'Ability: ') != "":
-                res['Abilities'] = [aux[1][0].replace('Ability: ', '')]
-            elif found_str_by_regex(aux[1][0], 'Possible abilities: ') != "":
-                res['Abilities'] = aux[1][0].replace('Possible abilities: ', '').split(', ')
-        if len(aux[1]) > 1:
-            if found_str_by_regex(aux[1][1], ' Item: ') != "":
-                res['Items'] = [aux[1][1].replace(' Item: ', '')]
-        for stat in aux[2]:
-            if found_str_by_regex(stat, 'Atk'):
-                res['Attack']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
-            if found_str_by_regex(stat, 'Def'):
-                res['Defense']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
-            if found_str_by_regex(stat, 'SpA'):
-                res['Sp. Atk']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
-            if found_str_by_regex(stat, 'SpD'):
-                res['Sp. Def']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
-            if found_str_by_regex(stat, 'Spe'):
-                res['Speed']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
-        aux = div_info.xpath('.//p[contains(@class, "section")]/text()')
-        for i,a in enumerate(aux):
-            key='Move'+str(i+1)
-            res[key]=a.replace('• ', '')
-
-        print(pkmn, res)
+        div_info = html.fromstring(self.driver.page_source).xpath('//div[@id="tooltipwrapper"]')
+        if len(div_info)>0:
+            div_info = div_info[0]
+            if ''.join([etree.tostring(child).decode('unicode_escape') for child in div_info.iterdescendants()])!='':
+                pkmn=div_info.xpath('.//h2/text()')[0].rstrip()
+                aux = div_info.xpath('.//h2/small/text()')
+                for a in aux:
+                    form = found_str_by_regex(a, '\(([^\)]+)\)').replace('(', '').replace(')', '')
+                    if form !="" and form not in fform:
+                        pkmn=form.rstrip()
+                    lvl = found_str_by_regex(a, 'L[0-9][0-9]').replace('L', '')
+                    if lvl != "":
+                        res['Lvl'] = lvl
+                aux=div_info.xpath('.//img[contains(@src,"gender")]/@alt')
+                if len(aux)>0:
+                    res['Gender'] = aux[0]
+                aux=div_info.xpath('.//span[contains(@class,"status")]/text()')
+                if len(aux)>0:
+                    res['Status']=aux[0].lower()
+                #res['Type']=div_info.xpath('.//img[contains(@src,"types")]/@alt')
+                aux = [str(t).replace('\xa0', '').replace('• ', '').split(' /') for t in
+                       div_info.xpath('.//p[not(contains(@class, "section"))]/text()')]
+                if found_str_by_regex(aux[0][0], '(\d+(\.\d+)?)%') != "":
+                    res['Health'] = found_str_by_regex(aux[0][0], '(\d+(\.\d+)?)%').replace('%', '')
+                else:
+                    res['Health'] = '0'
+                hp = found_str_by_regex(aux[0][0], '(?<![\d.])[0-9]+(?![\d.]).*?(?<![\d.])[0-9]+(?![\d.])')
+                hp=hp.split("/")
+                if len(hp) >1 and hp[1] != "":
+                    res['HP:']=hp[1]
+                if len(aux[1]) > 0:
+                    if found_str_by_regex(aux[1][0], 'Ability: ') != "":
+                        res['Abilities'] = [aux[1][0].replace('Ability: ', '')]
+                    elif found_str_by_regex(aux[1][0], 'Possible abilities: ') != "":
+                        res['Abilities'] = aux[1][0].replace('Possible abilities: ', '').split(', ')
+                if len(aux[1]) > 1:
+                    if found_str_by_regex(aux[1][1], ' Item: ') != "":
+                        res['Items'] = [aux[1][1].replace(' Item: ', '')]
+                for stat in aux[2]:
+                    if found_str_by_regex(stat, 'Atk'):
+                        res['Attack:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+                    if found_str_by_regex(stat, 'Def'):
+                        res['Defense:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+                    if found_str_by_regex(stat, 'SpA'):
+                        res['Sp. Atk:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+                    if found_str_by_regex(stat, 'SpD'):
+                        res['Sp. Def:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+                    if found_str_by_regex(stat, 'Spe'):
+                        res['Speed:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+                aux = div_info.xpath('.//p[contains(@class, "section")]//text()')
+                res['PP']=[None,None,None,None]
+                id=1
+                for i,a in enumerate(aux):
+                    if found_str_by_regex(a, '(?<![\d.])[0-9]+(?![\d.]).*?(?<![\d.])[0-9]+(?![\d.])') !="":
+                        a = a.replace("(",'').replace(")",'').split("/")
+                        if int(a[1]) ==1:
+                            res.pop('Move'+str(id), None)
+                            id=id-1
+                        else:
+                            res['PP'][id-2]=int(a[0])
+                    else:
+                        key='Move'+str(id)
+                        res[key]=[a.replace('• ', '').rstrip()]
+                        id=id+1
         return pkmn, res
+
+    def parse_move_div(self,movediv):
+        pp=movediv.xpath('./small[@class="pp"]/text()')[0]
+        pp=pp.split('/')[0]
+        return[movediv.xpath('./text()')[0],pp]
 
     def write_situation_history(self,battle_id):
         dir=battle_id.replace('/','')
         if not os.path.exists(os.path.join(battlelog,dir)):
             os.makedirs(os.path.join(battlelog,dir))
         i=len([x for x in os.listdir(os.path.join(battlelog,dir)) if x.endswith('.json')])
-        write_json_dict(os.path.join(battlelog,dir), dir+'-'+str(i)+'.json',self.battles[battle_id])
+        write_json_dict(os.path.join(battlelog,dir), dir+'_'+str(i)+'.json',self.battles[battle_id])
 
     def get_battle_html_file(self,battle_id):
         dir = battle_id.replace('/', '')
