@@ -35,7 +35,6 @@ def split_pkmn_form(string,char,index):
     except IndexError:
         return ""
 
-
 # Class API for website smogon
 class Smogon():
 

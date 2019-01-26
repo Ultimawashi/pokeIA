@@ -1,24 +1,42 @@
-=== [gen7ou] Untitled 9 ===
+=== [gen7ou] Untitled 6 ===
 
-Volcarona @ Buginium Z  
-Ability: Flame Body  
+Diggersby @ Life Orb  
+Ability: Huge Power  
+EVs: 252 Atk / 4 SpD / 252 Spe  
+Jolly Nature  
+- Return  
+- Earthquake  
+- Quick Attack  
+- Fire Punch  
+
+Toxapex @ Black Sludge  
+Ability: Regenerator  
+EVs: 248 HP / 64 Def / 180 SpD / 16 Spe  
+Calm Nature  
+IVs: 0 Atk  
+- Scald  
+- Toxic Spikes  
+- Recover  
+- Haze  
+
+Latias @ Choice Scarf  
+Ability: Levitate  
 EVs: 252 SpA / 4 SpD / 252 Spe  
 Timid Nature  
 IVs: 0 Atk  
-- Quiver Dance  
-- Fire Blast  
-- Bug Buzz  
-- Hidden Power [Ground]  
-
-Tapu Fini @ Leftovers  
-Ability: Misty Surge  
-EVs: 252 HP / 24 Def / 232 Spe  
-Timid Nature  
-IVs: 0 Atk  
-- Whirlpool  
-- Nature's Madness  
+- Healing Wish  
 - Defog  
-- Taunt  
+- Psychic  
+- Draco Meteor  
+
+Scizor @ Scizorite  
+Ability: Light Metal  
+EVs: 248 HP / 16 Atk / 60 Def / 124 SpD / 60 Spe  
+Adamant Nature  
+- Swords Dance  
+- Roost  
+- Bullet Punch  
+- U-turn  
 
 Greninja-Ash @ Choice Specs  
 Ability: Battle Bond  
@@ -29,30 +47,11 @@ Timid Nature
 - Water Shuriken  
 - Spikes  
 
-Landorus-Therian @ Yache Berry  
-Ability: Intimidate  
-EVs: 248 HP / 116 Def / 144 Spe  
-Impish Nature  
+Garchomp @ Rockium Z  
+Ability: Rough Skin  
+EVs: 252 Atk / 4 SpD / 252 Spe  
+Jolly Nature  
+- Swords Dance  
+- Stone Edge  
 - Earthquake  
-- U-turn  
 - Stealth Rock  
-- Hidden Power [Ice]  
-
-Scizor-Mega @ Scizorite  
-Ability: Light Metal  
-EVs: 248 HP / 244 Def / 16 SpD  
-Impish Nature  
-- Curse  
-- Bullet Punch  
-- Roost  
-- U-turn  
-
-Latias @ Choice Scarf  
-Ability: Levitate  
-EVs: 4 Def / 252 SpA / 252 Spe  
-Timid Nature  
-IVs: 0 Atk  
-- Draco Meteor  
-- Surf  
-- Healing Wish  
-- Defog  

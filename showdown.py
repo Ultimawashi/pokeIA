@@ -1,6 +1,8 @@
-import os, json, gc, re, random, time, shutil
+import os, json, gc, re, random, time, shutil, string, unicodedata
+from math import sqrt, floor
 from selenium import webdriver
 from lxml import html, etree
+from itertools import combinations, chain
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -8,7 +10,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.action_chains import ActionChains
 from exceptions import *
-
 
 # Global variables
 battlelog="D:/projetsIA/pokeIA/battlelog"
@@ -18,6 +19,8 @@ default_home_value="gen7randombattle"
 data_dir="D:/projetsIA/pokeIA/pkmn_data"
 default_lvl=100
 dwnld_foler="D:/Users/FERNANDES_CL/Downloads"
+valid_filename_chars = "-_.() %s%s" % (string.ascii_letters, string.digits)
+char_limit = 255
 
 #If you want to add generations, put the new gens at the end of the list only
 gen_list=['gen1','gen2','gen3','gen4','gen5','gen6','gen7']
@@ -52,7 +55,7 @@ supported_format_eq = {
 
 #A dict which list all possible actions you can do while selecting a move, by gen
 possible_on_move_selection_action={
-    'gen7':['Zmove', 'Mega'],
+    'gen7':['Zmove'],
     'gen6':['Mega'],
     'gen5':[],
     'gen4':[],
@@ -74,29 +77,67 @@ possible_on_switch_selection_action={
 
 #A dict which list all the main actions you can do in pokemon (select a move or switch) , by gen
 possible_action_dict={
-    'gen7':['Move1','Move2','Move3','Move4',
-            'Switch1','Switch2','Switch3','Switch4','Switch5','Switch6'],
-    'gen6':['Move1','Move2','Move3','Move4',
-            'Switch1','Switch2','Switch3','Switch4','Switch5','Switch6'],
-    'gen5':['Move1','Move2','Move3','Move4',
-            'Switch1','Switch2','Switch3','Switch4','Switch5','Switch6'],
-    'gen4':['Move1','Move2','Move3','Move4',
-            'Switch1','Switch2','Switch3','Switch4','Switch5','Switch6'],
-    'gen3':['Move1','Move2','Move3','Move4',
-            'Switch1','Switch2','Switch3','Switch4','Switch5','Switch6'],
-    'gen2':['Move1','Move2','Move3','Move4',
-            'Switch1','Switch2','Switch3','Switch4','Switch5','Switch6'],
+    'gen7':[],
+    'gen6':[],
+    'gen5':[],
+    'gen4':[],
+    'gen3':[],
+    'gen2':[],
     'gen1':['Move1','Move2','Move3','Move4',
             'Switch1','Switch2','Switch3','Switch4','Switch5','Switch6']
 }
 
 # Utility functions
+def clean_filename(filename, whitelist=valid_filename_chars, replace=' '):
+    # replace spaces
+    for r in replace:
+        filename = filename.replace(r, '_')
+
+    # keep only valid ascii chars
+    cleaned_filename = unicodedata.normalize('NFKD', filename).encode('ASCII', 'ignore').decode()
+
+    # keep only whitelisted chars
+    cleaned_filename = ''.join(c for c in cleaned_filename if c in whitelist)
+    if len(cleaned_filename) > char_limit:
+        print(
+            "Warning, filename truncated because it was over {}. Filenames may no longer be unique".format(char_limit))
+    return cleaned_filename[:char_limit]
 
 def downloads_done():
     for i in os.listdir(download_dir):
         if ".crdownload" in i or ".tmp" in i:
             time.sleep(0.5)
             downloads_done()
+
+def calc_min_max_stats(statname,lvl,s,gen):
+    lvllist = [lvl]
+    if lvl == 0:
+        lvllist=range(1,101)
+    aux=[]
+    for lvl in lvllist:
+        if gen_list.index(gen)>1:
+            if statname == 'HP:':
+                if s == 1:
+                    aux=aux + [1,1]
+                else:
+                    aux = aux + [floor((2*s+31+(252/4))*(lvl/100)) + lvl +10, floor((2*s)*(lvl/100)) + lvl +10]
+            else:
+                aux = aux + [floor(((2*s+31+(252/4))*(lvl/100) + 5) *1.1),floor(((2*s)*(lvl/100) + 5) *0.9)]
+        else:
+            if statname == 'HP:':
+                if s == 1:
+                    aux = aux + [1, 1]
+                else:
+                    aux = aux + [floor(((s+31)*2+floor(sqrt(252)/4))*(lvl/100)) + lvl + 10,floor(((s)*2)*(lvl/100)) + lvl + 10]
+            else:
+                aux = aux + [floor(((s+31)*2+floor(sqrt(252)/4))*(lvl/100)) + 5,floor(((s)*2)*(lvl/100)) + 5]
+
+    return [min(aux),max(aux)]
+
+def calc_pkmn_stats(pokedict,gen):
+    statkey= ['HP:','Attack:','Defense:','Sp. Atk:','Sp. Def:','Speed:']
+    for k in statkey:
+        pokedict[k]=[calc_min_max_stats(k,int(pokedict['Lvl']),int(s),gen) for s in pokedict[k]]
 
 def write_json_dict(folder,filename,data):
     with open(os.path.join(folder, filename), 'w') as outfile:
@@ -114,13 +155,9 @@ def write_txt(folder,filename,data):
         with open(os.path.join(folder, filename), 'a') as outfile:
             outfile.write(data)
 
-def merge_pkmn_dicts_same_key(ds,spec_key=['Abilities','Movepool']):
-    norm_key=[k for k in ds[0].keys() if k not in spec_key]
+def merge_pkmn_dicts_same_key(ds):
     res = {}
-    [res.update({k: [d[k] for d in ds]}) for k in norm_key]
-    for k in spec_key:
-        res.update({k:[]})
-        [res.update({k:res[k] + list(set(d[k]) - set(res[k]))}) for d in ds]
+    [res.update({k: [d[k] for d in ds]}) for k in ds[0].keys()]
     return res
 
 def found_str_by_regex(string,regex):
@@ -133,16 +170,14 @@ def found_str_by_regex(string,regex):
 def build_action_dict(actiondict,on_move_actiondict,on_switch_actiondict):
     res=dict()
     for key in actiondict:
-
-        move_action_list = []
-        for action in on_move_actiondict[key]:
-            move_action_list=move_action_list+[[action, move] for move in actiondict[key] if move.startswith('Move')]
-
-        switch_action_list = []
-        for action in on_switch_actiondict[key]:
-            switch_action_list=switch_action_list+[[action, switch] for switch in actiondict[key] if switch.startswith('Switch')]
-
-        res.update({key:move_action_list+switch_action_list+[[action] for action in actiondict[key]]})
+        index = gen_list.index(key)
+        included_gens = [x for i, x in enumerate(gen_list) if i <= index]
+        actions=[]
+        for genkey in included_gens:
+            actions = actions + [[action] for action in actiondict[genkey]]
+            actions=actions + [[[action, move[0]] for move in actions if len(move)==1 and move[0].startswith('Move')] for action in on_move_actiondict[genkey]]
+            actions = actions + [[[action, switch[0]] for switch in actions if len(switch)==1 and switch[0].startswith('Switch')] for action in on_switch_actiondict[genkey]]
+        res.update({key:actions})
     return res
 
 def build_action_map(gen,actiondict):
@@ -183,10 +218,9 @@ def get_pkmn_data(pkmn,gen,tier):
         pkmn_data = [pkmn_data[key] for key in tiers]
         [f_data.update(d) for d in pkmn_data]
     if pkmn in f_data.keys():
-        res_data=f_data[pkmn]
+        res_data=merge_pkmn_dicts_same_key([f_data[pkmn]])
     else:
-        res_data=f_data
-        res_data=merge_pkmn_dicts_same_key([res_data[pkmn] for pkmn in res_data.keys()])
+        res_data=merge_pkmn_dicts_same_key([f_data[pkmn] for pkmn in f_data.keys()])
     return res_data
 
 def parse_pkmn_id(identifier):
@@ -226,13 +260,10 @@ def build_pokedict(poke_info,gen,tier):
     res['Items']=get_items_key(gen)
     res['Gender']='none'
     res['Lvl']=default_lvl
+    res['MoveSeen']=[]
     res.update(get_pkmn_data(poke_info[0],gen,tier))
-    res['Move1'] = res['Movepool']
-    res['Move2'] = res['Movepool']
-    res['Move3'] = res['Movepool']
-    res['Move4'] = res['Movepool']
+    calc_pkmn_stats(res, gen)
     res['PP'] = [None, None, None, None]
-    res.pop('Movepool',None)
     return {poke_info[0]:res}
 
 def update_pokedict_with_icon(pokedict,poke_info,gen,tier):
@@ -242,9 +273,20 @@ def update_pokedict_with_icon(pokedict,poke_info,gen,tier):
         pokedict[poke_info[0]] = pokedict.pop(key)
         key=poke_info[0]
         pokedict[key].update(get_pkmn_data(poke_info[0], gen, tier))
-        for keyM in ['Move1','Move2','Move3','Move4']:
-                pokedict[key][keyM] = list(set(pokedict[key][keyM]).intersection(pokedict[key]['Movepool']))
-        pokedict[key].pop('Movepool', None)
+        calc_pkmn_stats(pokedict[key], gen)
+
+def build_movepool(movepoollist):
+    return [list(combinations(movepool,4)) for movepool in movepoollist]
+
+def get_list_containing_sublist(alist, asublist):
+    return [elem for elem in alist if elem[0:0+len(asublist)]==asublist]
+
+def remove_empty_list_recusrsively(alist,index):
+    for i,elem in enumerate(alist[index]):
+        if isinstance(elem,list):
+            remove_empty_list_recusrsively(alist,i)
+    if len(alist[index]) == 0:
+        alist.pop(index)
 
 # Custom selenium wait class
 class check_if_connected(object):
@@ -378,6 +420,7 @@ class ShowdownBot():
         self.action_dict = build_action_dict(possible_action_dict,
                                              possible_on_move_selection_action,
                                              possible_on_switch_selection_action)
+        print(self.action_dict)
         self.teams=dict()
 
     def start_driver(self):
@@ -772,10 +815,13 @@ class ShowdownBot():
                                       self.get_adv_active_pkmn_info(battle_id))
             if self.is_time_to_select_action():
                 self.update_battle_situation(battle_id)
-                index=self.select_random_action(self.battles[battle_id]['gen'])
-                self.apply_action(self.battles[battle_id]['gen'], index)
+                self.update_with_div_info(self.battles[battle_id]['battle_situation']['adv_poke_map'],
+                                          self.get_adv_active_pkmn_info(battle_id))
                 if write:
                     self.write_situation_history(battle_id)
+                index=self.select_random_action(self.battles[battle_id]['gen'])
+                self.apply_action(self.battles[battle_id]['gen'], index)
+
         if write:
             self.get_battle_html_file(battle_id)
         closeroom = self.wait.until(
@@ -819,6 +865,8 @@ class ShowdownBot():
         else:
             self.update_with_div_info(self.battles[battle_id]['battle_situation']['my_poke_map'],
                                   self.get_my_active_pkmn_info(battle_id))
+        self.get_current_boost(battle_id)
+        self.get_terrain_info(battle_id)
 
     def get_adv_active_pkmn_info(self,battleid):
         iddiv="BattleTooltips.showTooltipFor('"+battleid.replace('/','')+"', 'your0','pokemon', this, true)"
@@ -835,13 +883,11 @@ class ShowdownBot():
                 (By.XPATH, '//div[@onmouseover ="'+iddiv+'"]'))
         )
         pkmn,res=self.get_pkmn_info_div(test)
-        for key in ['Move1','Move2','Move3','Move4']:
-            res.pop(key, None)
         movediv = html.fromstring(self.driver.page_source).xpath('//div[@class="movemenu"]/button[@name="chooseMove"]')
         move_info=[self.parse_move_div(move) for move in movediv]
+        res['MoveSeen']=[]
         for i, a in enumerate(move_info):
-                key = 'Move' + str(i+1)
-                res[key] = a[0]
+                res['MoveSeen'].append(a[0])
                 res['PP'][i]=a[1]
         return pkmn,res
 
@@ -867,7 +913,7 @@ class ShowdownBot():
                         pkmn=form.rstrip()
                     lvl = found_str_by_regex(a, 'L[0-9][0-9]').replace('L', '')
                     if lvl != "":
-                        res['Lvl'] = lvl
+                        res['Lvl'] = int(lvl)
                 aux=div_info.xpath('.//img[contains(@src,"gender")]/@alt')
                 if len(aux)>0:
                     res['Gender'] = aux[0]
@@ -878,13 +924,13 @@ class ShowdownBot():
                 aux = [str(t).replace('\xa0', '').replace('• ', '').split(' /') for t in
                        div_info.xpath('.//p[not(contains(@class, "section"))]/text()')]
                 if found_str_by_regex(aux[0][0], '(\d+(\.\d+)?)%') != "":
-                    res['Health'] = found_str_by_regex(aux[0][0], '(\d+(\.\d+)?)%').replace('%', '')
+                    res['Health'] = float(found_str_by_regex(aux[0][0], '(\d+(\.\d+)?)%').replace('%', ''))
                 else:
-                    res['Health'] = '0'
+                    res['Health'] = float(0)
                 hp = found_str_by_regex(aux[0][0], '(?<![\d.])[0-9]+(?![\d.]).*?(?<![\d.])[0-9]+(?![\d.])')
                 hp=hp.split("/")
                 if len(hp) >1 and hp[1] != "":
-                    res['HP:']=hp[1]
+                    res['HP:']=[[int(hp[1]),int(hp[1])]]
                 if len(aux[1]) > 0:
                     if found_str_by_regex(aux[1][0], 'Ability: ') != "":
                         res['Abilities'] = [aux[1][0].replace('Ability: ', '')]
@@ -894,31 +940,41 @@ class ShowdownBot():
                     if found_str_by_regex(aux[1][1], ' Item: ') != "":
                         res['Items'] = [aux[1][1].replace(' Item: ', '')]
                 for stat in aux[2]:
-                    if found_str_by_regex(stat, 'Atk'):
-                        res['Attack:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
-                    if found_str_by_regex(stat, 'Def'):
-                        res['Defense:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
-                    if found_str_by_regex(stat, 'SpA'):
-                        res['Sp. Atk:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
-                    if found_str_by_regex(stat, 'SpD'):
-                        res['Sp. Def:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
-                    if found_str_by_regex(stat, 'Spe'):
-                        res['Speed:']=found_str_by_regex(stat, '(?<![\d.])[0-9]+(?![\d.])')
+                    if found_str_by_regex(stat, 'Atk')!= "":
+                        res['Attack:']=[int(s) for s in re.findall('(?<![\d.])[0-9]+(?![\d.])',stat)]
+                        if len(res['Attack:'])==1:
+                            res['Attack:']=[[res['Attack:'][0],res['Attack:'][0]]]
+                    if found_str_by_regex(stat, 'Def')!= "":
+                        res['Defense:']=[int(s) for s in re.findall('(?<![\d.])[0-9]+(?![\d.])',stat)]
+                        if len(res['Defense:'])==1:
+                            res['Defense:']=[[res['Defense:'][0],res['Defense:'][0]]]
+                    if found_str_by_regex(stat, 'SpA')!= "":
+                        res['Sp. Atk:']=[int(s) for s in re.findall('(?<![\d.])[0-9]+(?![\d.])',stat)]
+                        if len(res['Sp. Atk:'])==1:
+                            res['Sp. Atk:']=[[res['Sp. Atk:'][0],res['Sp. Atk:'][0]]]
+                    if found_str_by_regex(stat, 'SpD')!= "":
+                        res['Sp. Def:']=[int(s) for s in re.findall('(?<![\d.])[0-9]+(?![\d.])',stat)]
+                        if len(res['Sp. Def:'])==1:
+                            res['Sp. Def:']=[[res['Sp. Def:'][0],res['Sp. Def:'][0]]]
+                    if found_str_by_regex(stat, 'Spe')!= "":
+                        res['Speed:']=[int(s) for s in re.findall('(?<![\d.])[0-9]+(?![\d.])',stat)]
+                        if len(res['Speed:'])==1:
+                            res['Speed:']=[[res['Speed:'][0],res['Speed:'][0]]]
+
                 aux = div_info.xpath('.//p[contains(@class, "section")]//text()')
                 res['PP']=[None,None,None,None]
-                id=1
-                for i,a in enumerate(aux):
-                    if found_str_by_regex(a, '(?<![\d.])[0-9]+(?![\d.]).*?(?<![\d.])[0-9]+(?![\d.])') !="":
-                        a = a.replace("(",'').replace(")",'').split("/")
-                        if int(a[1]) ==1:
-                            res.pop('Move'+str(id), None)
-                            id=id-1
-                        else:
-                            res['PP'][id-2]=int(a[0])
+                res['MoveSeen']=[]
+                id=0
+                for a in aux:
+                    test=[int(s) for s in re.findall('(?<![\d.])[0-9]+(?![\d.])',a)]
+                    if len(test)>1:
+                            if int(test[1]) == 1:
+                                del res['MoveSeen'][-1]
+                            else:
+                                res['PP'][id] = int(test[0])
                     else:
-                        key='Move'+str(id)
-                        res[key]=[a.replace('• ', '').rstrip()]
-                        id=id+1
+                        res['MoveSeen'].append(a.replace('• ', '').rstrip())
+                        id=len(res['MoveSeen'])-1
         return pkmn, res
 
     def parse_move_div(self,movediv):
@@ -927,13 +983,17 @@ class ShowdownBot():
         return[movediv.xpath('./text()')[0],pp]
 
     def write_situation_history(self,battle_id):
+        dir_user=clean_filename(self.username)
+        if not os.path.exists(os.path.join(battlelog,dir_user)):
+            os.makedirs(os.path.join(battlelog,dir_user))
         dir=battle_id.replace('/','')
-        if not os.path.exists(os.path.join(battlelog,dir)):
-            os.makedirs(os.path.join(battlelog,dir))
-        i=len([x for x in os.listdir(os.path.join(battlelog,dir)) if x.endswith('.json')])
-        write_json_dict(os.path.join(battlelog,dir), dir+'_'+str(i)+'.json',self.battles[battle_id])
+        if not os.path.exists(os.path.join(battlelog,dir_user,dir)):
+            os.makedirs(os.path.join(battlelog,dir_user,dir))
+        i=len([x for x in os.listdir(os.path.join(battlelog,dir_user,dir)) if x.endswith('.json')])
+        write_json_dict(os.path.join(battlelog,dir_user,dir), dir+'_'+str(i)+'.json',self.battles[battle_id])
 
     def get_battle_html_file(self,battle_id):
+        dir_user = clean_filename(self.username)
         dir = battle_id.replace('/', '')
         dwnld_button=self.wait.until(
             EC.presence_of_element_located((By.CSS_SELECTOR, '.button.replayDownloadButton'))
@@ -941,4 +1001,117 @@ class ShowdownBot():
         dwnld_button.click()
         downloads_done()
         filename = max([os.path.join(download_dir,f) for f in os.listdir(download_dir)], key=os.path.getctime)
-        shutil.move(os.path.join(download_dir, filename), os.path.join(battlelog,dir,dir+'.html'))
+        shutil.move(os.path.join(download_dir, filename), os.path.join(battlelog,dir_user,dir,dir+'.html'))
+
+    def get_current_boost(self,battleid):
+        my_boost_info = html.fromstring(self.driver.page_source).xpath(
+            '//div[contains(@class,"statbar") and contains(@class,"rstatbar")]//span[@class="good" or @class="bad"]/text()')
+        self.battles[battleid]['battle_situation']['my_boost']=[1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+        rm_list=[]
+        for boost in my_boost_info:
+            if found_str_by_regex(boost, 'Atk') != "":
+                self.battles[battleid]['battle_situation']['my_boost'][0] = float(found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'Def') != "":
+                self.battles[battleid]['battle_situation']['my_boost'][1] = float(found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'SpA') != "":
+                self.battles[battleid]['battle_situation']['my_boost'][2] = float(found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'SpD') != "":
+                self.battles[battleid]['battle_situation']['my_boost'][3] = float(found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'Spe') != "":
+                self.battles[battleid]['battle_situation']['my_boost'][4] = float(found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'Accuracy') != "":
+                self.battles[battleid]['battle_situation']['my_boost'][5] = float(found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'Evasion') != "":
+                self.battles[battleid]['battle_situation']['my_boost'][6] = float(found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+        self.battles[battleid]['battle_situation']['my_state']=[elem for elem in my_boost_info if elem not in rm_list]
+
+        adv_boost_info = html.fromstring(self.driver.page_source).xpath(
+            '//div[contains(@class,"statbar") and contains(@class,"lstatbar")]//span[@class="good" or @class="bad"]/text()')
+        self.battles[battleid]['battle_situation']['adv_boost'] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        rm_list = []
+        for boost in adv_boost_info:
+            if found_str_by_regex(boost, 'Atk') != "":
+                self.battles[battleid]['battle_situation']['adv_boost'][0] = float(
+                    found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'Def') != "":
+                self.battles[battleid]['battle_situation']['adv_boost'][1] = float(
+                    found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'SpA') != "":
+                self.battles[battleid]['battle_situation']['adv_boost'][2] = float(
+                    found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'SpD') != "":
+                self.battles[battleid]['battle_situation']['adv_boost'][3] = float(
+                    found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'Spe') != "":
+                self.battles[battleid]['battle_situation']['adv_boost'][4] = float(
+                    found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'Accuracy') != "":
+                self.battles[battleid]['battle_situation']['adv_boost'][5] = float(
+                    found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+            if found_str_by_regex(boost, 'Evasion') != "":
+                self.battles[battleid]['battle_situation']['adv_boost'][6] = float(
+                    found_str_by_regex(boost, '(\d+(\.\d+)?)'))
+                rm_list = rm_list + [boost]
+        self.battles[battleid]['battle_situation']['adv_state'] = [elem for elem in adv_boost_info if elem not in rm_list]
+
+    def get_terrain_info(self,battleid):
+        weather = html.fromstring(self.driver.page_source).xpath('//div[@class="innerbattle"]//div[contains(@class, "weather")]/em//text()')
+        id=0
+        self.battles[battleid]['battle_situation']['weather']=[]
+        for a in weather:
+            test = [int(s) for s in re.findall('(?<![\d.])[0-9]+(?![\d.])', a)]
+            if len(test) > 0:
+                if len(test) != 2:
+                    test=[test[0],test[0]]
+                self.battles[battleid]['battle_situation']['weather'][id] =[self.battles[battleid]['battle_situation']['weather'][id],test]
+            else:
+                self.battles[battleid]['battle_situation']['weather'].append([a.rstrip()])
+                id = len(self.battles[battleid]['battle_situation']['weather']) - 1
+        self.battles[battleid]['battle_situation']['my_hasard']=[]
+        my_rock=html.fromstring(self.driver.page_source).xpath(
+            '//div[@class="innerbattle"]/div[@role="complementary"]/preceding-sibling::div[1]/div[3]/img[contains(@src, "rock")]')
+        if len(my_rock)>0:
+            self.battles[battleid]['battle_situation']['my_hasard'].append(['Stealth Rock',1])
+        my_web = html.fromstring(self.driver.page_source).xpath(
+            '//div[@class="innerbattle"]/div[@role="complementary"]/preceding-sibling::div[1]/div[3]/img[contains(@src, "web")]')
+        if len(my_web) > 0:
+            self.battles[battleid]['battle_situation']['my_hasard'].append(['Sticky Web', 1])
+        my_spike=html.fromstring(self.driver.page_source).xpath(
+            '//div[@class="innerbattle"]/div[@role="complementary"]/preceding-sibling::div[1]/div[3]/img[contains(@src, "caltrop") and not(contains(@src, "poisoncaltrop"))]')
+        if len(my_spike)>0:
+            self.battles[battleid]['battle_situation']['my_hasard'].append(['Spike',len(my_spike)])
+        my_toxicspike=html.fromstring(self.driver.page_source).xpath(
+            '//div[@class="innerbattle"]/div[@role="complementary"]/preceding-sibling::div[1]/div[3]/img[contains(@src, "poisoncaltrop")]')
+        if len(my_toxicspike)>0:
+            self.battles[battleid]['battle_situation']['my_hasard'].append(['Toxic Spike',len(my_toxicspike)])
+
+        self.battles[battleid]['battle_situation']['adv_hasard'] = []
+        adv_rock = html.fromstring(self.driver.page_source).xpath(
+            '//div[@class="innerbattle"]/div[@role="complementary"]/preceding-sibling::div[1]/div[2]/img[contains(@src, "rock")]')
+        if len(adv_rock) > 0:
+            self.battles[battleid]['battle_situation']['adv_hasard'].append(['Stealth Rock', 1])
+        adv_web = html.fromstring(self.driver.page_source).xpath(
+            '//div[@class="innerbattle"]/div[@role="complementary"]/preceding-sibling::div[1]/div[2]/img[contains(@src, "web")]')
+        if len(adv_web) > 0:
+            self.battles[battleid]['battle_situation']['adv_hasard'].append(['Sticky Web', 1])
+        adv_spike = html.fromstring(self.driver.page_source).xpath(
+            '//div[@class="innerbattle"]/div[@role="complementary"]/preceding-sibling::div[1]/div[2]/img[contains(@src, "caltrop") and not(contains(@src, "poisoncaltrop"))]')
+        if len(adv_spike) > 0:
+            self.battles[battleid]['battle_situation']['adv_hasard'].append(['Spike', len(adv_spike)])
+        adv_toxicspike = html.fromstring(self.driver.page_source).xpath(
+            '//div[@class="innerbattle"]/div[@role="complementary"]/preceding-sibling::div[1]/div[2]/img[contains(@src, "poisoncaltrop")]')
+        if len(adv_toxicspike) > 0:
+            self.battles[battleid]['battle_situation']['adv_hasard'].append(['Toxic Spike', len(adv_toxicspike)])

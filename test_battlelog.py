@@ -1,5 +1,5 @@
 import os, json
-dir='D:/projetsIA/pokeIA/battlelog/battle-gen7ou-851920705'
+dir='D:/projetsIA/pokeIA/battlelog/iamabot447/battle-gen7ou-854201636'
 filelist= [x for x in os.listdir(dir) if x.endswith('.json')]
 filelist=sorted(filelist, key=lambda a: int(a.split("_")[1].split('.')[0]))
 data=[]

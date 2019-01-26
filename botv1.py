@@ -1,7 +1,7 @@
 from showdown import ShowdownBot
 from multiprocessing import Process
 
-teamtxt_path="D:/projetsIA/pokeIA/team_backup/pkmn_team_test.txt"
+teamtxt_path="D:/projetsIA/pokeIA/team_backup/team_for_testing.txt"
 
 bot=ShowdownBot("iamabot447","projectia21",browser='chrome', driver_dir="D:/projetsIA/pokeIA/driver/chromedriver.exe")
 bot.start_driver()
