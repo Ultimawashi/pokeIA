@@ -275,6 +275,12 @@ def update_pokedict_with_icon(pokedict,poke_info,gen,tier):
         pokedict[key].update(get_pkmn_data(poke_info[0], gen, tier))
         calc_pkmn_stats(pokedict[key], gen)
 
+def update_my_pokedict_div(pokedict,poke_info):
+    key=[key for key in pokedict.keys()][0]
+    pokedict[key].update(poke_info[1])
+    if key!=poke_info[0]:
+        pokedict[poke_info[0]] = pokedict.pop(key)
+
 def build_movepool(movepoollist):
     return [list(combinations(movepool,4)) for movepool in movepoollist]
 
@@ -850,18 +856,15 @@ class ShowdownBot():
             EC.presence_of_all_elements_located(
                 (By.XPATH, '//div[contains(@class,"teamicons")]/span[contains(@class,"picon")]'))
         )
-        my_pkmns = [parse_pkmn_id(my_pkmn.get_attribute('title')) for my_pkmn in pkmns[:6]]
-        [update_pokedict_with_icon(self.battles[battle_id]['battle_situation']['my_poke_map'][index], pkmn,
-                                   self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
-         index, pkmn in enumerate(my_pkmns)]
-
         adv_pkmns = [parse_pkmn_id(adv_pkmn.get_attribute('title')) for adv_pkmn in pkmns[6:]]
         [update_pokedict_with_icon(self.battles[battle_id]['battle_situation']['adv_poke_map'][index],pkmn,self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
                         index, pkmn in enumerate(adv_pkmns)]
 
         my_up_pkmns = self.driver.find_elements_by_css_selector(".switchmenu button")
         if len(my_up_pkmns)>0:
-            [self.update_with_div_info(self.battles[battle_id]['battle_situation']['my_poke_map'],self.get_pkmn_info_div(my_pkmn)) for my_pkmn in my_up_pkmns]
+            [update_my_pokedict_div(self.battles[battle_id]['battle_situation']['my_poke_map'][index],
+                                    self.get_pkmn_info_div(my_pkmn)) for
+             index, my_pkmn in enumerate(my_up_pkmns)]
         else:
             self.update_with_div_info(self.battles[battle_id]['battle_situation']['my_poke_map'],
                                   self.get_my_active_pkmn_info(battle_id))
