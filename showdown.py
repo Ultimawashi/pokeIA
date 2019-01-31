@@ -275,8 +275,18 @@ def update_pokedict_with_icon(pokedict,poke_info,gen,tier):
         pokedict[key].update(get_pkmn_data(poke_info[0], gen, tier))
         calc_pkmn_stats(pokedict[key], gen)
 
-def update_my_pokedict_div(pokedict,poke_info):
+def update_my_pokedict_div(pokedict,poke_info,index,gen, tier):
+    if index == 0:
+        poke_info[1]['Active']=1
+    else:
+        poke_info[1]['Active'] = 0
+    if poke_info[1]['Health']==0.0:
+        poke_info[1]['Fainted']=1
+    else:
+        poke_info[1]['Fainted'] = 0
     key=[key for key in pokedict.keys()][0]
+    pokedict[key].update(get_pkmn_data(poke_info[0], gen, tier))
+    calc_pkmn_stats(pokedict[key], gen)
     pokedict[key].update(poke_info[1])
     if key!=poke_info[0]:
         pokedict[poke_info[0]] = pokedict.pop(key)
@@ -819,6 +829,7 @@ class ShowdownBot():
         while not self.is_battle_finished():
             self.update_with_div_info(self.battles[battle_id]['battle_situation']['adv_poke_map'],
                                       self.get_adv_active_pkmn_info(battle_id))
+            self.get_message_bar(battle_id)
             if self.is_time_to_select_action():
                 self.update_battle_situation(battle_id)
                 self.update_with_div_info(self.battles[battle_id]['battle_situation']['adv_poke_map'],
@@ -826,6 +837,7 @@ class ShowdownBot():
                 if write:
                     self.write_situation_history(battle_id)
                 index=self.select_random_action(self.battles[battle_id]['gen'])
+                self.battles[battle_id]['battle_situation']['message'] = []
                 self.apply_action(self.battles[battle_id]['gen'], index)
 
         if write:
@@ -838,6 +850,7 @@ class ShowdownBot():
         closeroom.click()
 
     def initialize_battle_situation(self,battle_id):
+        self.battles[battle_id]['battle_situation']['message']=[]
         pkmns=self.wait.until(
             EC.presence_of_all_elements_located((By.XPATH, '//div[contains(@class,"teamicons")]/span[contains(@class,"picon")]'))
         )
@@ -863,11 +876,11 @@ class ShowdownBot():
         my_up_pkmns = self.driver.find_elements_by_css_selector(".switchmenu button")
         if len(my_up_pkmns)>0:
             [update_my_pokedict_div(self.battles[battle_id]['battle_situation']['my_poke_map'][index],
-                                    self.get_pkmn_info_div(my_pkmn)) for
+                                    self.get_pkmn_info_div(my_pkmn),index,self.battles[battle_id]['gen'], self.battles[battle_id]['tier']) for
              index, my_pkmn in enumerate(my_up_pkmns)]
         else:
-            self.update_with_div_info(self.battles[battle_id]['battle_situation']['my_poke_map'],
-                                  self.get_my_active_pkmn_info(battle_id))
+            update_my_pokedict_div(self.battles[battle_id]['battle_situation']['my_poke_map'][0],
+                                   self.get_my_active_pkmn_info(battle_id), 0,self.battles[battle_id]['gen'], self.battles[battle_id]['tier'])
         self.get_current_boost(battle_id)
         self.get_terrain_info(battle_id)
 
@@ -920,9 +933,13 @@ class ShowdownBot():
                 aux=div_info.xpath('.//img[contains(@src,"gender")]/@alt')
                 if len(aux)>0:
                     res['Gender'] = aux[0]
+                else:
+                    res['Gender'] = 'none'
                 aux=div_info.xpath('.//span[contains(@class,"status")]/text()')
                 if len(aux)>0:
                     res['Status']=aux[0].lower()
+                else:
+                    res['Status'] = 'none'
                 #res['Type']=div_info.xpath('.//img[contains(@src,"types")]/@alt')
                 aux = [str(t).replace('\xa0', '').replace('• ', '').split(' /') for t in
                        div_info.xpath('.//p[not(contains(@class, "section"))]/text()')]
@@ -1118,3 +1135,13 @@ class ShowdownBot():
             '//div[@class="innerbattle"]/div[@role="complementary"]/preceding-sibling::div[1]/div[2]/img[contains(@src, "poisoncaltrop")]')
         if len(adv_toxicspike) > 0:
             self.battles[battleid]['battle_situation']['adv_hasard'].append(['Toxic Spike', len(adv_toxicspike)])
+
+    def get_message_bar(self,battleid):
+        messagelist=html.fromstring(self.driver.page_source).xpath(
+            '//div[@class="battle"]/div[@class="innerbattle"]//div[contains(@class, "messagebar") and contains(@class, "message")]/p//text()')
+        message=''.join(messagelist)
+        if len(self.battles[battleid]['battle_situation']['message'])==0:
+            self.battles[battleid]['battle_situation']['message'].append(message)
+        else:
+            if message != self.battles[battleid]['battle_situation']['message'][-1]:
+                self.battles[battleid]['battle_situation']['message'].append(message)
