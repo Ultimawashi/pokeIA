@@ -3,6 +3,7 @@
 ./pkmn_data/*
 ./battlelog/*
 ./battlelog/*/*
+./battlelog/*/*/*
 ./download/*
 ./.idea/*
 ./team_backup/*
